@@ -6,14 +6,14 @@
 uint64_t timer_tick( void )
 {
     struct timespec ts;
-    time_t seconds, microSeconds;
+    time_t seconds, nanoSeconds;
 
     (void)clock_gettime( CLOCK_MONOTONIC, &ts );
 
-    microSeconds = ts.tv_nsec / 1000;
-    seconds = ts.tv_sec * 1000000;
+    nanoSeconds = ts.tv_nsec;
+    seconds = ts.tv_sec * 1000000000;
 
-    return seconds + microSeconds;
+    return seconds + nanoSeconds;
 }
 
 void timer_start(uint64_t *timer)

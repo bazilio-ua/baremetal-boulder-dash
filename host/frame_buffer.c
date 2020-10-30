@@ -2,7 +2,6 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 #include "game.h"
-#include "buttons.h"
 #include <string.h>
 #include <assert.h>
 
@@ -11,7 +10,7 @@ typedef struct
     SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_Texture *texture;
-    uint16_t tft_fb[2][SCREEN_HEIGHT][SCREEN_WIDTH];
+    uint32_t tft_fb[BACKBUFFER_HEIGHT][BACKBUFFER_WIDTH];
 } monitor_t;
 
 static monitor_t monitor = { 0 };
@@ -36,7 +35,7 @@ int quit_filter(void *userdata, SDL_Event *event)
     return 1;
 }
 
-volatile unsigned char* frame_buffer_init(void)
+volatile uint32_t* frame_buffer_init(void)
 {
     /*Initialize the SDL*/
     if( SDL_Init( SDL_INIT_VIDEO ) < 0 )
@@ -48,14 +47,14 @@ volatile unsigned char* frame_buffer_init(void)
     SDL_SetEventFilter( quit_filter, NULL );
 
     m->window = SDL_CreateWindow( "Boulder Dash", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                  SCREEN_WIDTH, SCREEN_HEIGHT, 0 );
+                                  BACKBUFFER_WIDTH * 3, BACKBUFFER_HEIGHT * 3, 0 );
     assert( m->window );
 
     m->renderer = SDL_CreateRenderer( m->window, -1, SDL_RENDERER_SOFTWARE );
     assert( m->renderer );
 
-    m->texture = SDL_CreateTexture( m->renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STATIC,
-                                    SCREEN_WIDTH, SCREEN_HEIGHT );
+    m->texture = SDL_CreateTexture( m->renderer, SDL_PIXELFORMAT_BGRA8888, SDL_TEXTUREACCESS_STATIC,
+                                    BACKBUFFER_WIDTH, BACKBUFFER_HEIGHT );
     assert( m->texture );
 
     SDL_SetTextureBlendMode( m->texture, SDL_BLENDMODE_BLEND );
@@ -67,7 +66,7 @@ int frame_buffer_switch(int offset)
 {
     (void) offset;
 
-    int rslt = SDL_UpdateTexture( m->texture, NULL, m->tft_fb, SCREEN_WIDTH * sizeof(uint16_t) );
+    int rslt = SDL_UpdateTexture( m->texture, NULL, m->tft_fb, BACKBUFFER_WIDTH * sizeof(uint32_t) );
     assert( 0 == rslt );
     rslt = SDL_RenderClear( m->renderer );
     assert( 0 == rslt );
@@ -81,10 +80,11 @@ int frame_buffer_switch(int offset)
     return 0;
 }
 
-uint8_t poll_controller(void)
+bool keyPressed = false;
+uint8_t keyVal = 0;
+uint8_t poll_controller(uint8_t virtKey)
 {
-    uint8_t output = 0;
-
+    (void)virtKey;
     SDL_Event event;
 
     while( SDL_PollEvent( &event ) )
@@ -92,24 +92,34 @@ uint8_t poll_controller(void)
         switch( event.type )
         {
         case SDL_KEYDOWN:
+            keyPressed = 1;
             switch( event.key.keysym.sym )
             {
+            case SDLK_SPACE :
+                keyVal = KEY_FIRE;
+                break;
+
+            case SDLK_KP_0 :
+            case SDLK_0 :
+                keyVal = KEY_ZERO;
+                break;
+
             case SDLK_RIGHT:
             case SDLK_KP_PLUS:
-                output |= 1;
+                keyVal = KEY_RIGHT;
                 break;
 
             case SDLK_LEFT:
             case SDLK_KP_MINUS:
-                output |= 2;
+                keyVal = KEY_LEFT;
                 break;
 
             case SDLK_UP:
-                output |= 8;
+                keyVal = KEY_UP;
                 break;
 
             case SDLK_DOWN:
-                output |= 4;
+                keyVal = KEY_DOWN;
                 break;
 
             case SDLK_ESCAPE:
@@ -119,15 +129,17 @@ uint8_t poll_controller(void)
             break;
 
         case SDL_KEYUP:
+            keyPressed = 0;
+            keyVal = 0;
+            break;
+
         default:
             break;
 
         }
     }
 
-    if( 0 == output )
-    {
-        SDL_Delay( 5 ); /* Sleep for 5 millisecond */
-    }
-    return output;
+    SDL_Delay( 5 ); /* Sleep for 5 millisecond */
+
+    return keyVal;
 }

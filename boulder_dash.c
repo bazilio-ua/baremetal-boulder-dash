@@ -2,99 +2,40 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define ARRAY_LENGTH(array) (sizeof(array)/sizeof(*array))
 
+#define RGBAQUADV(b,g,r,a) (((uint32_t)b)<<24|((uint32_t)g)<<16|((uint32_t)r)<<8|(uint32_t)a)
+
 #include "data_sprites.h"
 #include "data_caves.h"
+#include "game.h"
+#include "util.h"
 
-typedef uint32_t RGBQUAD;
+const RGBQUAD black = RGBAQUADV( 0x00, 0x00, 0x00, 0xff );
+const RGBQUAD red = RGBAQUADV( 0x00, 0x00, 0xCC, 0xff );
+const RGBQUAD green = RGBAQUADV( 0x00, 0xCC, 0x00, 0xff );
+const RGBQUAD yellow = RGBAQUADV( 0x00, 0xCC, 0xCC, 0xff );
+const RGBQUAD blue = RGBAQUADV( 0xCC, 0x00, 0x00, 0xff );
+const RGBQUAD purple = RGBAQUADV( 0xCC, 0x00, 0xCC, 0xff );
+const RGBQUAD cyan = RGBAQUADV( 0xCC, 0xCC, 0x00, 0xff );
+const RGBQUAD gray = RGBAQUADV( 0xCC, 0xCC, 0xCC, 0xff );
+const RGBQUAD white = RGBAQUADV( 0xFF, 0xFF, 0xFF, 0xff );
 
-// Developer options
-#define DEV_IMMEDIATE_STARTUP 0
-#define DEV_NEAR_OUTBOX 0
-#define DEV_SINGLE_DIAMOND_NEEDED 0
-#define DEV_CHEAP_BONUS_LIFE 0
-#define DEV_CAMERA_DEBUGGING 0
-#define DEV_SLOW_TICK_DURATION 0
-#define DEV_QUICK_OUT_OF_TIME 0
-#define DEV_SINGLE_LIFE 0
-
-// Gameplay constants
-#define START_CAVE CAVE_A
-#define TICKS_PER_TURN 5
-#define ROCKFORD_TURNS_TILL_BIRTH 12
-#define CELL_COVER_TURNS 40
-#define TILE_COVER_TICKS (32*TICKS_PER_TURN)
-#define BONUS_LIFE_COST (DEV_CHEAP_BONUS_LIFE ? 5 : 500)
-#define SPACE_FLASHING_TURNS 10
-#define MAX_LIVES 9
-#define COVER_PAUSE 2
-#define TICKS_PER_CAVE_SECOND (7*TICKS_PER_TURN)
-#define OUT_OF_TIME_ON_TURNS 25
-#define OUT_OF_TIME_OFF_TURNS 42
-#define TURNS_TILL_GAME_RESTART 10
-#define TURNS_TILL_EXITING_CAVE 12
-
-#define TOO_MANY_AMOEBA 200
-#define AMOEBA_FACTOR_SLOW 127
-#define AMOEBA_FACTOR_FAST 15
-
-// Keys
-#define KEY_FIRE VK_SPACE
-#define KEY_RIGHT VK_RIGHT
-#define KEY_LEFT VK_LEFT
-#define KEY_DOWN VK_DOWN
-#define KEY_UP VK_UP
-#define KEY_FAIL 'Q'
-#define KEY_QUIT VK_ESCAPE
-
-// Cave map consists of cells, each cell contains 4 (2x2) tiles
-#define TILE_SIZE 8
-#define CELL_SIZE (TILE_SIZE*2)
-
-#define BORDER_SIZE CELL_SIZE
-#define STATUS_BAR_HEIGHT CELL_SIZE
-
-// Viewport is the whole screen area except the border
-#define VIEWPORT_WIDTH 256
-#define VIEWPORT_HEIGHT 192
-#define VIEWPORT_LEFT BORDER_SIZE
-#define VIEWPORT_TOP BORDER_SIZE
-#define VIEWPORT_RIGHT (VIEWPORT_LEFT + VIEWPORT_WIDTH - 1)
-#define VIEWPORT_BOTTOM (VIEWPORT_TOP + VIEWPORT_HEIGHT - 1)
-
-// Playfield is the whole viewport except the status bar
-#define PLAYFIELD_WIDTH VIEWPORT_WIDTH
-#define PLAYFIELD_HEIGHT (VIEWPORT_HEIGHT - STATUS_BAR_HEIGHT)
-#define PLAYFIELD_LEFT VIEWPORT_LEFT
-#define PLAYFIELD_TOP (VIEWPORT_TOP + STATUS_BAR_HEIGHT)
-#define PLAYFIELD_RIGHT (PLAYFIELD_LEFT + PLAYFIELD_WIDTH - 1)
-#define PLAYFIELD_BOTTOM (PLAYFIELD_TOP + PLAYFIELD_HEIGHT - 1)
-
-#define PLAYFIELD_HEIGHT_IN_TILES (PLAYFIELD_HEIGHT/TILE_SIZE)
-#define PLAYFIELD_WIDTH_IN_TILES (PLAYFIELD_WIDTH/TILE_SIZE)
-
-#define CAMERA_START_LEFT (PLAYFIELD_LEFT + 6*TILE_SIZE)
-#define CAMERA_STOP_LEFT (PLAYFIELD_LEFT + 14*TILE_SIZE)
-#define CAMERA_START_TOP (PLAYFIELD_TOP + 4*TILE_SIZE)
-#define CAMERA_STOP_TOP (PLAYFIELD_TOP + 9*TILE_SIZE)
-#define CAMERA_START_RIGHT (PLAYFIELD_RIGHT - 6*TILE_SIZE + 1)
-#define CAMERA_STOP_RIGHT (PLAYFIELD_RIGHT - 13*TILE_SIZE + 1)
-#define CAMERA_START_BOTTOM (PLAYFIELD_BOTTOM - 4*TILE_SIZE + 1)
-#define CAMERA_STOP_BOTTOM (PLAYFIELD_BOTTOM - 9*TILE_SIZE + 1)
-
-#define CAMERA_X_MIN 0
-#define CAMERA_Y_MIN 0
-#define CAMERA_X_MAX (CAVE_WIDTH*CELL_SIZE - PLAYFIELD_WIDTH)
-#define CAMERA_Y_MAX (CAVE_HEIGHT*CELL_SIZE - PLAYFIELD_HEIGHT)
-
-#define CAMERA_STEP TILE_SIZE
-
-// Backbuffer has 4 bits per pixel
-#define BACKBUFFER_WIDTH (VIEWPORT_WIDTH + BORDER_SIZE*2)
-#define BACKBUFFER_HEIGHT (VIEWPORT_HEIGHT + BORDER_SIZE*2)
-#define BACKBUFFER_BYTES (BACKBUFFER_WIDTH*BACKBUFFER_HEIGHT/2)
+RGBQUAD bmiColors[ COLOR_COUNT ] =
+{
+    [ BLACK  ] = black,
+    [   RED  ] = red,
+    [  GREEN ] = green,
+    [ YELLOW ] = yellow,
+    [  BLUE  ] = blue,
+    [ PURPLE ] = purple,
+    [  CYAN  ] = cyan,
+    [  GRAY  ] = gray,
+    [ WHITE  ] = white,
+};
 
 typedef enum
 {
@@ -201,11 +142,6 @@ typedef enum
     CAVE_COUNT,
 } CaveName;
 
-typedef enum
-{
-    BLACK, GRAY, WHITE, RED, YELLOW, GREEN, BLUE, PURPLE, CYAN, COLOR_COUNT
-} Color;
-
 typedef struct
 {
     Color boulderFg;
@@ -233,7 +169,7 @@ typedef enum
 // Global variables
 //
 
-uint8_t *backbuffer;
+volatile uint32_t *backbuffer;
 uint8_t map[ CAVE_HEIGHT ][ CAVE_WIDTH ];
 CaveInfo *caveInfo;
 int turnsSinceRockfordSeenAlive;
@@ -248,17 +184,6 @@ MagicWallStatus magicWallStatus;
 
 ///////////////
 
-void debugPrint(char *format, ...)
-{
-    va_list argptr;
-    va_start( argptr, format );
-
-    char str[1024];
-    vsprintf_s( str, sizeof(str), format, argptr );
-    va_end( argptr );
-    OutputDebugString( str );
-}
-
 //
 // Graphics
 //
@@ -269,21 +194,10 @@ void setPixel(int x, int y, Color color)
     assert( (color & 0xF0) == 0 );
 
     int pixelOffset = y * BACKBUFFER_WIDTH + x;
-    int byteOffset = pixelOffset / 2;
 
-    assert( byteOffset >= 0 && byteOffset < BACKBUFFER_BYTES );
+//    assert( pixelOffset >= 0 && pixelOffset < BACKBUFFER_BYTES );
 
-    Color oldColor = backbuffer[ byteOffset ];
-    Color newColor;
-    if( pixelOffset % 2 == 0 )
-    {
-        newColor = ( color << 4 ) | ( oldColor & 0x0F );
-    }
-    else
-    {
-        newColor = ( oldColor & 0xF0 ) | color;
-    }
-    backbuffer[ byteOffset ] = newColor;
+    backbuffer[ pixelOffset ] = bmiColors[ color ];
 }
 
 void drawRect(int left, int top, int right, int bottom, Color color)
@@ -571,7 +485,7 @@ void explode(int atRow, int atCol, int scanRow, int scanCol)
     }
 }
 
-void updateBoulderAndDiamond(SoundSystem *sys, int row, int col, bool isFalling, bool isBoulder)
+void updateBoulderAndDiamond(int row, int col, bool isFalling, bool isBoulder)
 {
     Object fallingScannedObj = isBoulder ? OBJ_BOULDER_FALLING_SCANNED : OBJ_DIAMOND_FALLING_SCANNED;
     Object stationaryScannedObj = isBoulder ? OBJ_BOULDER_STATIONARY_SCANNED : OBJ_DIAMOND_STATIONARY_SCANNED;
@@ -633,7 +547,7 @@ void updateBoulderAndDiamond(SoundSystem *sys, int row, int col, bool isFalling,
     }
 }
 
-bool isFailed()
+bool isFailed( void )
 {
     return turnsSinceRockfordSeenAlive >= 16 || isOutOfTime;
 }
@@ -730,22 +644,39 @@ void getNewFlyPosition(int curRow, int curCol, Direction curDirection, Turning t
             break;
         }
         break;
+
+        default :
+            assert( 0 );
     }
 }
 
 Object getFlyScanned(Direction direction, bool isFirefly)
 {
+    Object rtnv;
+
     switch( direction )
     {
     case UP:
-        return isFirefly ? OBJ_FIREFLY_UP_SCANNED : OBJ_BUTTERFLY_UP_SCANNED;
+        rtnv = isFirefly ? OBJ_FIREFLY_UP_SCANNED : OBJ_BUTTERFLY_UP_SCANNED;
+        break;
+
     case DOWN:
-        return isFirefly ? OBJ_FIREFLY_DOWN_SCANNED : OBJ_BUTTERFLY_DOWN_SCANNED;
+        rtnv = isFirefly ? OBJ_FIREFLY_DOWN_SCANNED : OBJ_BUTTERFLY_DOWN_SCANNED;
+        break;
+
     case LEFT:
-        return isFirefly ? OBJ_FIREFLY_LEFT_SCANNED : OBJ_BUTTERFLY_LEFT_SCANNED;
+        rtnv = isFirefly ? OBJ_FIREFLY_LEFT_SCANNED : OBJ_BUTTERFLY_LEFT_SCANNED;
+        break;
+
     case RIGHT:
-        return isFirefly ? OBJ_FIREFLY_RIGHT_SCANNED : OBJ_BUTTERFLY_RIGHT_SCANNED;
+        rtnv = isFirefly ? OBJ_FIREFLY_RIGHT_SCANNED : OBJ_BUTTERFLY_RIGHT_SCANNED;
+        break;
+
+    default :
+        assert( 0 );
     }
+
+    return rtnv;
 }
 
 Direction getFlyDirection(Object fly, bool isFirefly)
@@ -762,6 +693,8 @@ Direction getFlyDirection(Object fly, bool isFirefly)
             return LEFT;
         case OBJ_FIREFLY_RIGHT:
             return RIGHT;
+        default :
+            assert( 0 );
         }
     }
     else
@@ -776,6 +709,8 @@ Direction getFlyDirection(Object fly, bool isFirefly)
             return LEFT;
         case OBJ_BUTTERFLY_RIGHT:
             return RIGHT;
+        default :
+            assert( 0 );
         }
     }
 }
@@ -835,12 +770,12 @@ void addScore(int amount)
     }
 }
 
-bool isIntermission()
+bool isIntermission( void )
 {
     return ((currentCaveNumber + 1) % 5) == 0;
 }
 
-void incrementCaveNumber()
+void incrementCaveNumber( void )
 {
     ++currentCaveNumber;
     if( currentCaveNumber >= CAVE_COUNT )
@@ -853,7 +788,7 @@ void incrementCaveNumber()
     }
 }
 
-char getCurrentCaveLetter()
+char getCurrentCaveLetter( void )
 {
     switch( currentCaveNumber )
     {
@@ -916,6 +851,8 @@ void getRandomCellNear(int row, int col, int *newRow, int *newCol)
     case RIGHT:
         (*newCol)++;
         break;
+    default :
+        assert( 0 );
     }
 }
 
@@ -923,49 +860,23 @@ void getRandomCellNear(int row, int col, int *newRow, int *newCol)
 
 bool isKeyDown(uint8_t virtKey)
 {
-    return GetFocus() && (GetKeyState( virtKey ) & 0x8000);
+    bool rtnv = 0;
+    extern bool keyPressed;
+    extern uint8_t keyVal;
+    if( virtKey == keyVal )
+    {
+        rtnv = keyPressed;
+    }
+    return rtnv;
 }
 
 int main(void)
 {
-    int windowScale = 3;
-    int windowWidth = BACKBUFFER_WIDTH * windowScale;
-    int windowHeight = BACKBUFFER_HEIGHT * windowScale;
-
     //
-    // Initialize graphics
+    // Initialise graphics
     //
 
-    backbuffer = malloc( BACKBUFFER_BYTES );
-
-    BITMAPINFO *bitmapInfo = malloc( sizeof(BITMAPINFOHEADER) + (COLOR_COUNT * sizeof(RGBQUAD)) );
-    bitmapInfo->bmiHeader.biSize = sizeof(bitmapInfo->bmiHeader);
-    bitmapInfo->bmiHeader.biWidth = BACKBUFFER_WIDTH;
-    bitmapInfo->bmiHeader.biHeight = -BACKBUFFER_HEIGHT;
-    bitmapInfo->bmiHeader.biPlanes = 1;
-    bitmapInfo->bmiHeader.biBitCount = 4;
-    bitmapInfo->bmiHeader.biCompression = BI_RGB;
-    bitmapInfo->bmiHeader.biClrUsed = COLOR_COUNT;
-
-    RGBQUAD black = { 0x00, 0x00, 0x00, 0x00 };
-    RGBQUAD red = { 0x00, 0x00, 0xCC, 0x00 };
-    RGBQUAD green = { 0x00, 0xCC, 0x00, 0x00 };
-    RGBQUAD yellow = { 0x00, 0xCC, 0xCC, 0x00 };
-    RGBQUAD blue = { 0xCC, 0x00, 0x00, 0x00 };
-    RGBQUAD purple = { 0xCC, 0x00, 0xCC, 0x00 };
-    RGBQUAD cyan = { 0xCC, 0xCC, 0x00, 0x00 };
-    RGBQUAD gray = { 0xCC, 0xCC, 0xCC, 0x00 };
-    RGBQUAD white = { 0xFF, 0xFF, 0xFF, 0x00 };
-
-    bitmapInfo->bmiColors[BLACK] = black;
-    bitmapInfo->bmiColors[RED] = red;
-    bitmapInfo->bmiColors[GREEN] = green;
-    bitmapInfo->bmiColors[YELLOW] = yellow;
-    bitmapInfo->bmiColors[BLUE] = blue;
-    bitmapInfo->bmiColors[PURPLE] = purple;
-    bitmapInfo->bmiColors[CYAN] = cyan;
-    bitmapInfo->bmiColors[GRAY] = gray;
-    bitmapInfo->bmiColors[WHITE] = white;
+    backbuffer = frame_buffer_init();
 
     //
     // Clock
@@ -974,12 +885,11 @@ int main(void)
     float dt = 0.0f;
     float targetFps = 60.0f;
     float maxDt = 1.0f / targetFps;
-    uint64_t perfcFreq = { 0 };
-    uint64_t perfc = { 0 };
-    uint64_t perfcPrev = { 0 };
+    uint64_t perfcFreq = 100000ULL;
+    uint64_t perfc = 0ULL;
+    uint64_t perfcPrev = 0;
 
-    QueryPerformanceFrequency( &perfcFreq );
-    QueryPerformanceCounter( &perfc );
+    perfc = timer_tick();
 
     //
     // Initialize cave colors
@@ -1107,7 +1017,7 @@ int main(void)
     caveColors[INTERMISSION_4].dirtFg = YELLOW;
 
     //
-    // Initialize game
+    // Initialise game
     //
 
     bool cellCover[CAVE_HEIGHT][CAVE_WIDTH];
@@ -1135,14 +1045,14 @@ int main(void)
     int cameraVelY = 0;
 
     //
-    // These variables are initialized when game starts
+    // These variables are initialised when game starts
     //
 
     bool isCaveStart;
     int pauseTurnsLeft;
 
     //
-    // These variables are initialized when cave starts
+    // These variables are initialised when cave starts
     //
 
     bool isExitingCave;
@@ -1180,37 +1090,21 @@ int main(void)
     while( gameIsRunning )
     {
         perfcPrev = perfc;
-        QueryPerformanceCounter( &perfc );
-        dt = (float) (perfc.QuadPart - perfcPrev.QuadPart) / (float) perfcFreq.QuadPart;
-        //debugPrint("dt: %f\n", dt);
+        perfc = timer_tick();
+        dt = (float) (perfc - perfcPrev) / (float) perfcFreq;
+        //printf("dt: %f\n", dt);
         if( dt > maxDt )
         {
             dt = maxDt;
         }
 
         // Handle Windows messages
-        MSG msg;
-        while( PeekMessage( &msg, 0, 0, 0, PM_REMOVE ) )
-        {
-            switch( msg.message )
-            {
-            case WM_QUIT:
-                gameIsRunning = false;
-                break;
-
-            default:
-                TranslateMessage( &msg );
-                DispatchMessage( &msg );
-                break;
-            }
-        }
-
         if( isKeyDown( KEY_QUIT ) )
         {
             gameIsRunning = false;
         }
 
-        // Initialization on game start
+        // Initialisation on game start
         if( isGameStart )
         {
             isGameStart = false;
@@ -1225,7 +1119,7 @@ int main(void)
             spaceFlashingTurnsLeft = 0;
         }
 
-        // Initialization on cave start
+        // Initialisation on cave start
         if( isCaveStart && pauseTurnsLeft == 0 )
         {
             isCaveStart = false;
@@ -1722,13 +1616,13 @@ int main(void)
 
                                     case OBJ_BOULDER_STATIONARY:
                                     case OBJ_BOULDER_FALLING:
-                                        updateBoulderAndDiamond( &soundSystem, row, col,
+                                        updateBoulderAndDiamond( row, col,
                                                 map[row][col] == OBJ_BOULDER_FALLING, true );
                                         break;
 
                                     case OBJ_DIAMOND_STATIONARY:
                                     case OBJ_DIAMOND_FALLING:
-                                        updateBoulderAndDiamond( &soundSystem, row, col,
+                                        updateBoulderAndDiamond( row, col,
                                                 map[row][col] == OBJ_DIAMOND_FALLING, false );
                                         break;
 
@@ -1960,11 +1854,11 @@ int main(void)
 
             if( livesLeft == 0 )
             {
-                sprintf_s( statusBarText, sizeof(statusBarText), "        G A M E  O V E R" );
+                snprintf( statusBarText, sizeof(statusBarText), "        G A M E  O V E R" );
             }
             else if( isOutOfTimeTextShown && tileCoverTicksLeft == 0 )
             {
-                sprintf_s( statusBarText, sizeof(statusBarText), "     O U T   O F   T I M E" );
+                snprintf( statusBarText, sizeof(statusBarText), "     O U T   O F   T I M E" );
             }
             else
             {
@@ -1972,11 +1866,11 @@ int main(void)
                 {
                     if( isIntermission() )
                     {
-                        sprintf_s( statusBarText, sizeof(statusBarText), "       B O N U S  L I F E" );
+                        snprintf( statusBarText, sizeof(statusBarText), "       B O N U S  L I F E" );
                     }
                     else
                     {
-                        sprintf_s( statusBarText, sizeof(statusBarText), "  PLAYER 1,  %d MEN,  ROOM %c/%d",
+                        snprintf( statusBarText, sizeof(statusBarText), "  PLAYER 1,  %d MEN,  ROOM %c/%d",
                                 livesLeft, getCurrentCaveLetter(), difficultyLevel + 1 );
                     }
                 }
@@ -1984,13 +1878,13 @@ int main(void)
                 {
                     if( diamondsCollected < caveInfo->diamondsNeeded[difficultyLevel] )
                     {
-                        sprintf_s( statusBarText, sizeof(statusBarText), "   %02d*%02d   %02d   %03d   %06d",
+                        snprintf( statusBarText, sizeof(statusBarText), "   %02d*%02d   %02d   %03d   %06d",
                                 caveInfo->diamondsNeeded[difficultyLevel], currentDiamondValue,
                                 diamondsCollected, caveTimeLeft, score );
                     }
                     else
                     {
-                        sprintf_s( statusBarText, sizeof(statusBarText), "   ***%02d   %02d   %03d   %06d",
+                        snprintf( statusBarText, sizeof(statusBarText), "   ***%02d   %02d   %03d   %06d",
                                 currentDiamondValue, diamondsCollected, caveTimeLeft, score );
                     }
                 }
@@ -2237,8 +2131,8 @@ int main(void)
             }
 
             // Display backbuffer
-            StretchDIBits( deviceContext, 0, 0, windowWidth, windowHeight, 0, 0, BACKBUFFER_WIDTH,
-                    BACKBUFFER_HEIGHT, backbuffer, bitmapInfo, DIB_RGB_COLORS, SRCCOPY );
+            frame_buffer_switch(0);
+            poll_controller(0);
         }
     }
 
