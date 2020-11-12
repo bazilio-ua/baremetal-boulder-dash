@@ -37,7 +37,7 @@ int quit_filter(void *userdata, SDL_Event *event)
 
 volatile uint32_t* frame_buffer_init(void)
 {
-    /*Initialize the SDL*/
+    /* Initialise the SDL*/
     if( SDL_Init( SDL_INIT_VIDEO ) < 0 )
     {
         printf( "SDL could not initialise! SDL_Error: %s\n", SDL_GetError() );
@@ -120,6 +120,11 @@ uint8_t poll_controller(uint8_t virtKey)
 
             case SDLK_DOWN:
                 keyVal = KEY_DOWN;
+                break;
+
+            case SDLK_RETURN2 :
+            case SDLK_RETURN :
+                keyVal = KEY_FAIL;
                 break;
 
             case SDLK_ESCAPE:
