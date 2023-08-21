@@ -1,28 +1,28 @@
-# Makefile
+INC=-I/opt/local/include
 
-CROSS_COMPILE := /opt/gcc-arm-none-eabi-6-2017-q1-update/bin/arm-none-eabi-
+CFLAGS = -g -Wall $(INC)
 
-COMPILER := gcc
-SHORT_ENUMS := n
+LIBS=-L/opt/local/lib -lSDL2
 
-#CPU := rpi1
-CPU := host
-BLD_TARGET := bolder-dash
-BLD_TYPE := debug
 
-CSRC += boulder_dash.c
+OBJECTS = util.o frame_buffer.o boulder_dash.o
 
-INC += .
+all: boulder-dash
 
-ifeq ($(CPU),rpi1)
-PROJ_DIRS := rpi1
-endif
-ifeq ($(CPU),host)
-PROJ_DIRS := host
-EXTRA_LIBS := -lSDL2
-endif
+boulder-dash: $(OBJECTS)
+	gcc $(OBJECTS) -o boulder-dash $(LIBS)
 
-include makefiles/main.mk
+util.o: ./util.c
+	gcc -c ./util.c $(CFLAGS);
 
-distclean:
-	rm -rf build
+frame_buffer.o: ./frame_buffer.c
+	gcc -c ./frame_buffer.c $(CFLAGS);
+
+boulder_dash.o: ./boulder_dash.c
+	gcc -c ./boulder_dash.c $(CFLAGS);
+
+clean:
+	rm -f *.o
+
+purge:	clean
+	rm -f boulder-dash
